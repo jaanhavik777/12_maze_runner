@@ -1,41 +1,14 @@
-import pygame
-import time
-from game.maze import generate_maze, CELL
-from game.player import Player
-
-FPS = 60
-BG = (240, 235, 220)
-WALL_COLOR = (40, 40, 60)
-EXIT_COLOR = (80, 200, 80)
-COLS, ROWS = 15, 13
-
-WIDTH = COLS * CELL
-HEIGHT = ROWS * CELL + 60
-
-class GameEngine:
-    def __init__(self):
-        pygame.init()
-        self.screen = pygame.display.set_mode((WIDTH, HEIGHT))
-        pygame.display.set_caption("Maze Runner")
-        self.clock = pygame.time.Clock()
-        self.font = pygame.font.SysFont("monospace", 22)
-        self.big_font = pygame.font.SysFont("monospace", 36, bold=True)
-        self.reset()
-
-    def reset(self):
-        self.walls = generate_maze(COLS, ROWS)
-        self.player = Player(0, 0)
-        self.exit_rect = pygame.Rect((COLS-1)*CELL+5, (ROWS-1)*CELL+5, CELL-10, CELL-10)
-        self.start_time = time.time()
-        self.elapsed = 0
-        self.won = False
+        self.solution_path = self._bfs_shortest_path()
 
     def handle_events(self):
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 return False
-            if event.type == pygame.KEYDOWN and event.key == pygame.K_r:
-                self.reset()
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_r:
+                    self.reset()
+                elif event.key == pygame.K_h:
+                    self.show_solution = not self.show_solution
         return True
 
     def update(self):
@@ -46,6 +19,70 @@ class GameEngine:
         self.elapsed = time.time() - self.start_time
         if self.player.rect.colliderect(self.exit_rect):
             self.won = True
+
+    def _bfs_shortest_path(self):
+        """Return the shortest path from the start cell to the exit using BFS."""
+        start = (0, 0)
+        goal = (ROWS - 1, COLS - 1)
+
+        # Each cell stores [N, S, E, W]. False means that side is open.
+        directions = [
+            (-1, 0, 0),  # North
+            (1, 0, 1),   # South
+            (0, 1, 2),   # East
+            (0, -1, 3),  # West
+        ]
+
+        queue = [start]
+        parent = {start: None}
+
+        while queue:
+            current = queue.pop(0)
+            if current == goal:
+                break
+
+            r, c = current
+            for dr, dc, wall_dir in directions:
+                nr, nc = r + dr, c + dc
+
+                if not (0 <= nr < ROWS and 0 <= nc < COLS):
+                    continue
+                if self.walls[r][c][wall_dir]:
+                    continue
+
+                neighbor = (nr, nc)
+                if neighbor not in parent:
+                    parent[neighbor] = current
+                    queue.append(neighbor)
+
+        if goal not in parent:
+            return []
+
+        path = []
+        current = goal
+        while current is not None:
+            path.append(current)
+            current = parent[current]
+
+        path.reverse()
+        return path
+
+    def draw_solution(self):
+        """Draw the BFS solution as colored squares inside each path cell."""
+        if not self.show_solution:
+            return
+
+        path_color = (255, 210, 70)
+        inset = 7
+
+        for r, c in self.solution_path:
+            rect = pygame.Rect(
+                c * CELL + inset,
+                r * CELL + inset,
+                CELL - 2 * inset,
+                CELL - 2 * inset,
+            )
+            pygame.draw.rect(self.screen, path_color, rect, border_radius=5)
 
     def draw_maze(self):
         wall_w = 3
@@ -60,6 +97,7 @@ class GameEngine:
 
     def draw(self):
         self.screen.fill(BG)
+        self.draw_solution()
         self.draw_maze()
         pygame.draw.rect(self.screen, EXIT_COLOR, self.exit_rect, border_radius=4)
         ex_label = self.font.render("EXIT", True, (20,80,20))
@@ -68,7 +106,12 @@ class GameEngine:
 
         hud = pygame.Rect(0, ROWS*CELL, WIDTH, 60)
         pygame.draw.rect(self.screen, (30,30,50), hud)
-        time_surf = self.font.render(f"Time: {self.elapsed:.1f}s   R = New Maze", True, (200,200,200))
+        hint_state = "ON" if self.show_solution else "OFF"
+        time_surf = self.font.render(
+            f"Time: {self.elapsed:.1f}s   H = Hint ({hint_state})   R = New Maze",
+            True,
+            (200,200,200),
+        )
         self.screen.blit(time_surf, (10, ROWS*CELL+18))
 
         if self.won:
@@ -83,9 +126,3 @@ class GameEngine:
 
     def run(self):
         running = True
-        while running:
-            running = self.handle_events()
-            self.update()
-            self.draw()
-            self.clock.tick(FPS)
-        pygame.quit()
