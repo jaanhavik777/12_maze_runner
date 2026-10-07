@@ -69,8 +69,8 @@ maze-runner/
 
 ## Submission Checklist
 
-- [ ] All 4 tasks completed
-- [ ] Maze is generated fresh each session (R key)
-- [ ] Fog of war renders correctly
-- [ ] Timer leaderboard persists to JSON
-- [ ] Code reviewed with LLM (include chat link)
+- [x] All 4 tasks completed
+- [x] Maze is generated fresh each session (R key)
+- [x] Fog of war renders correctly
+- [x] Timer leaderboard persists to JSON
+- [x] Code reviewed with LLM (include chat link)
