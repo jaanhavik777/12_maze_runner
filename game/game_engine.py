@@ -1,5 +1,6 @@
 import pygame
 import time
+import json
 from game.maze import generate_maze, CELL
 from game.player import Player
 
@@ -9,6 +10,8 @@ WALL_COLOR = (40, 40, 60)
 EXIT_COLOR = (80, 200, 80)
 FOG_COLOR = (0, 0, 0, 210)
 FOG_RADIUS = 3
+LEADERBOARD_FILE = "leaderboard.json"
+MAX_SCORES = 5
 COLS, ROWS = 15, 13
 
 WIDTH = COLS * CELL
@@ -22,7 +25,28 @@ class GameEngine:
         self.clock = pygame.time.Clock()
         self.font = pygame.font.SysFont("monospace", 22)
         self.big_font = pygame.font.SysFont("monospace", 36, bold=True)
+        self.leaderboard = self.load_leaderboard()
         self.reset()
+
+    def load_leaderboard(self):
+        try:
+            with open(LEADERBOARD_FILE, "r", encoding="utf-8") as f:
+                scores = json.load(f)
+            if not isinstance(scores, list):
+                return []
+            return sorted(float(score) for score in scores)[:MAX_SCORES]
+        except (FileNotFoundError, json.JSONDecodeError, TypeError, ValueError):
+            return []
+
+    def save_leaderboard(self):
+        with open(LEADERBOARD_FILE, "w", encoding="utf-8") as f:
+            json.dump(self.leaderboard, f, indent=2)
+
+    def add_score(self, score):
+        self.leaderboard.append(round(score, 3))
+        self.leaderboard.sort()
+        self.leaderboard = self.leaderboard[:MAX_SCORES]
+        self.save_leaderboard()
 
     def reset(self):
         self.walls = generate_maze(COLS, ROWS)
@@ -31,6 +55,7 @@ class GameEngine:
         self.start_time = time.time()
         self.elapsed = 0
         self.won = False
+        self.score_saved = False
         self.show_solution = False
         self.solution_path = self._bfs_shortest_path()
 
@@ -53,6 +78,9 @@ class GameEngine:
         self.elapsed = time.time() - self.start_time
         if self.player.rect.colliderect(self.exit_rect):
             self.won = True
+            if not self.score_saved:
+                self.add_score(self.elapsed)
+                self.score_saved = True
 
     def _bfs_shortest_path(self):
         """Return the shortest path from the start cell to the exit using BFS."""
@@ -66,31 +94,3 @@ class GameEngine:
             (0, 1, 2),   # East
             (0, -1, 3),  # West
         ]
-
-        queue = [start]
-        parent = {start: None}
-
-        while queue:
-            current = queue.pop(0)
-            if current == goal:
-                break
-
-            r, c = current
-            for dr, dc, wall_dir in directions:
-                nr, nc = r + dr, c + dc
-
-                if not (0 <= nr < ROWS and 0 <= nc < COLS):
-                    continue
-                if self.walls[r][c][wall_dir]:
-                    continue
-
-                neighbor = (nr, nc)
-                if neighbor not in parent:
-                    parent[neighbor] = current
-                    queue.append(neighbor)
-
-        if goal not in parent:
-            return []
-
-        path = []
-        current = goal
